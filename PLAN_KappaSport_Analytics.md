@@ -5,7 +5,7 @@
 
 > **Stato avanzamento**
 > - ✅ Fase 0 — Setup completato (scaffold Vite + React + TS + Tailwind + shadcn/ui, layout base, routing). Repo: `lome10/kappasport-analytics`, branch `dev`.
-> - ▶️ Fase 1 — Import dati: **in corso** (fase attuale).
+> - ▶️ Fase 1 — Import dati: **in corso**. Schema reale del formato KappaSport documentato in sezione 9 (da export Lecce 2024-25) → adattare parser e column mapper di conseguenza.
 > - ⬜ Fasi 2–6 — da fare.
 
 ---
@@ -34,6 +34,8 @@ L'app deve gestire tre famiglie di metriche. Lo schema esatto delle colonne va d
 3. **Test fisici / valutazioni periodiche** — salti, sprint test, forza, test di resistenza, misurazioni antropometriche, ecc. (dati più sporadici, non quotidiani).
 
 Ogni riga di dato è in genere associata a: **giocatore**, **data**, **categoria/sessione** (allenamento, partita, test), e un set di **metriche numeriche**.
+
+> **Importante:** lo schema reale del formato KappaSport in uso è ora documentato nella **sezione 9** (analizzato da un export Lecce 2024-25). Quel formato è lo standard di riferimento per i file presenti e futuri. In particolare: non contiene "test fisici" (solo GPS + cardio + carico), e la granularità è **per esercizio/drill**, non per giorno. Vedi sezione 9 per dettagli e regole di gestione.
 
 ---
 
@@ -100,19 +102,26 @@ interface MetricDefinition {
 interface DataPoint {
   playerId: string;
   date: string;         // ISO
-  sessionType: string;  // "training" | "match" | "test" | ...
-  values: Record<string, number | null>;  // key -> valore
+  sessionType: string;  // "Full Training" | "Partita" | "Possesso" | ... (campo "Categoria")
+  exercise?: string;    // "Esercizio" — granularità reale: 1 riga = 1 drill/esercizio
+  ampm?: 'AM' | 'PM';   // doppia seduta nello stesso giorno
+  matchCycle?: string;  // "Ciclo Gara" (microciclo settimanale)
+  isTeamAverage?: boolean; // riga aggregata generata da KappaSport, NON un giocatore reale
+  values: Record<string, number | null>;  // key -> valore (durate convertite in secondi)
 }
 
 interface Player { id: string; name: string; position?: string; group?: string; }
 
 interface Dataset {
-  players: Player[];
+  players: Player[];           // SOLO giocatori reali (Team Average escluso)
+  teamAverage?: DataPoint[];   // benchmark squadra fornito da KappaSport, tenuto a parte
   metrics: MetricDefinition[];
-  points: DataPoint[];
+  points: DataPoint[];         // SOLO righe di giocatori reali
   dateRange: { from: string; to: string };
 }
 ```
+
+> **Granularità (correzione rispetto all'ipotesi iniziale):** una riga NON è un giocatore-giorno, ma un **singolo esercizio/drill** all'interno di una sessione. Un giocatore ha più righe nello stesso giorno (diversi drill, eventualmente AM e PM). Le viste che ragionano per giorno o per sessione devono **aggregare** (somma per le metriche di volume come la distanza, media/max per le metriche di intensità). Prevedere in `metrics.ts` funzioni di aggregazione drill → sessione → giorno.
 
 ---
 
@@ -233,3 +242,52 @@ Documentare le formule con commenti e citare la convenzione usata, così sono ve
 - Il componente `DataTable` (sez. 4-bis) è centrale: costruiscilo generico e guidato dallo schema del dataset importato, mai con colonne hardcodate. Tutte le viste con tabella lo riusano.
 - Prima di scrivere i calcoli in `metrics.ts`, chiedi conferma sulle formule (le convenzioni su ACWR e carico variano tra staff).
 - Se lo schema reale di KappaSport differisce dalle assunzioni qui sopra, adatta il mapping, **non** hardcodare le colonne.
+- Lo schema reale è in **sezione 9**: usala come template di default del column mapper per il formato KappaSport/Lecce, ma lascia comunque l'utente libero di correggere il mapping per file leggermente diversi.
+
+---
+
+## 9. Schema di riferimento — formato KappaSport (analizzato da export Lecce 2024-25)
+
+Questo è il **formato standard** dei file (presenti e futuri). L'export ha la tabella dati nel foglio `DB` (named table `TabellaDataset`). Gli altri fogli sono tabelle pivot già pronte in Excel — è il comportamento che l'app deve replicare.
+
+**Forma dei dati:** ~9.900 righe, 73 colonne, 35 giocatori reali + 1 riga aggregata "Team Average", una stagione completa (nov → mag). **Granularità: una riga per esercizio/drill** (non per giorno).
+
+### 9.1 Colonne — dimensioni e contesto
+
+| Colonna | Ruolo | Note |
+|---|---|---|
+| `Giocatore` / `Atleta` | identificativo giocatore | "Team Average" = riga di sistema (vedi 9.4) |
+| `Data` | data sessione | datetime; in CSV italiano sarà gg/mm/aaaa |
+| `AM/PM` | turno | per gestire doppie sedute nello stesso giorno |
+| `Giorno settimana` | derivabile dalla data | |
+| `Squadra` | squadra | costante (US Lecce) |
+| `Ruolo` | posizione | codici IT: PO, DC, EST B, ecc. |
+| `n.maglia` | numero maglia | |
+| `Sessione` | id/codice sessione | |
+| `Esercizio` | nome drill | granularità della riga |
+| `Categoria` | **tipo sessione/esercizio** | 100+ valori (Full Training, Partita, Possesso, Palle inattive…): è uno **slicer libero**, non il toggle GPS/cardio/carico |
+| `Ciclo Gara` | microciclo | etichettato con la gara della settimana (es. "Lecce-Juventus") |
+| `IN/OUT` | flag titolare/subentrato | spesso vuoto |
+| `Torneo`, `Casa/Trasferta`, `Esito`, `Gara`, `Avversario`, `Giorni prima/dopo la gara` | contesto gara | popolati per le sessioni di tipo Partita |
+
+### 9.2 Colonne — metriche, per categoria (per `MetricDefinition.category`)
+
+- **GPS / fisiche (`gps`):** Distanza Tot (m), Dist >14/16/20/25 km/h, Vel max, AMP, %ED, N° Power Events, N° Acc/Dec >2,5 m/s², N° Sprint >25km/h, N°/D >90-95% Vmax, D Acc/Dec a varie soglie, MPmax, Energy J/kg, DIST EQ, an index, e tutte le metriche **per minuto** (D/min, Dist>14/min, VHIR, SPR, ACC, DEC /min), Max Acc, Max Dec.
+- **Cardio (`hr`):** HrAvg, %HRAvg, HRmax, FC >85%, HR Z3 85-90, HR Z4 90-95, HR Z5 >95%. ⚠️ **Le zone FC e i tempi sono durate in formato orario (mm:ss), non numeri** — vedi 9.4.
+- **Carico (`workload`):** RPE, Minutaggio, Training Load, T_MPHI.
+- **Da ignorare:** `Colonna1`…`Colonna5`, `DRILL PROGRESSIVO`, `DATA/AMPM` (colonne tecniche/vuote).
+
+> Aggiungere la categoria `hr` (cardio) all'enum `MetricCategory`: `'gps' | 'workload' | 'hr' | 'test'`. La categoria `test` resta nel modello ma in questo formato non è popolata.
+
+### 9.3 Mappatura di default del column mapper
+
+Precaricare questo mapping quando il file riconosciuto è in formato KappaSport (header che combaciano): `Atleta`/`Giocatore` → player, `Data` → date, `Categoria` → sessionType, `Esercizio` → exercise, `Ciclo Gara` → matchCycle, `AM/PM` → ampm; tutte le colonne metriche in 9.2 → `values` con la rispettiva categoria. L'utente può sempre rivedere il mapping prima di confermare.
+
+### 9.4 Regole di gestione obbligatorie (insidie del formato)
+
+1. **Riga "Team Average":** è un **dato aggregato generato direttamente da KappaSport** nell'estrazione GPS, presente in ogni export — non è un giocatore. In fase di import va **riconosciuta e separata**: NON entra nella lista giocatori né nei confronti, ma va conservata in `Dataset.teamAverage` e usata come **benchmark squadra già pronto** (es. overlay "giocatore vs media squadra" nelle viste, senza ricalcolarla). Rilevarla dal valore `Giocatore == "Team Average"`.
+2. **Colonne orarie (mm:ss):** le zone FC, i tempi e affini arrivano come valori orari. Il parser deve **convertirle in secondi** (numerico) per poterle aggregare e graficare; mostrare poi all'utente in formato mm:ss tramite formatter. Non trattarle come testo.
+3. **Granularità per drill:** aggregare correttamente quando la vista è per giorno/sessione — **somma** per i volumi (distanze, conteggi), **media o max** per le intensità (Vel max, %HRAvg). Funzioni in `metrics.ts`.
+4. **`Categoria` come slicer libero:** non mapparla sui 3-4 toggle macro; esporla come filtro multi-valore popolato dinamicamente dai valori presenti nel file.
+5. **Locale italiano nell'export CSV:** prevedere separatore di campo `;` e separatore decimale `,`. Il parser CSV deve gestirli (auto-detect del delimitatore + normalizzazione decimali).
+6. **Celle vuote diffuse:** RPE/Minutaggio assenti nelle sessioni di solo monitoraggio; molte metriche vuote sulla riga Team Average. Gestire i `null` senza rompere medie e grafici.

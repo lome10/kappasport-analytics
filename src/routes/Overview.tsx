@@ -1,14 +1,20 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Download } from 'lucide-react'
 import ImportWizard from '@/components/upload/ImportWizard'
 import KpiCard from '@/components/cards/KpiCard'
 import BarMetricChart from '@/components/charts/BarMetricChart'
-import PlayersTable from '@/components/overview/PlayersTable'
+import DataTable from '@/components/table/DataTable'
+import type { TableRow } from '@/hooks/useTableConfig'
 import { useDataStore } from '@/store/dataStore'
 import { useFilterStore } from '@/store/filterStore'
 import { useFilteredDataset } from '@/hooks/useFilteredDataset'
 import { applyFilters } from '@/lib/filters'
-import { groupMetricAvg, percentChange, getPreviousPeriodRange } from '@/lib/metrics'
+import {
+  groupMetricAvg,
+  percentChange,
+  getPreviousPeriodRange,
+  playerMetricAggregated,
+} from '@/lib/metrics'
 import { downloadCSV, downloadChartPNG } from '@/lib/export'
 
 export default function Overview() {
@@ -27,13 +33,12 @@ export default function Overview() {
   if (!hasData) return <ImportWizard />
   if (!filtered) return null
 
-  // Resolve active chart metric (fallback to first available)
   const activeMetricKey =
     filtered.metrics.some((m) => m.key === chartMetricKey)
       ? chartMetricKey
       : (filtered.metrics[0]?.key ?? '')
 
-  // Previous period for KPI trend comparison
+  // Previous period for KPI trend
   const prevRange = getPreviousPeriodRange(dateRange.from, dateRange.to)
   const previousFiltered =
     rawDataset && prevRange
@@ -48,19 +53,37 @@ export default function Overview() {
   const hasMetrics = filtered.metrics.length > 0
   const hasPlayers = filtered.players.length > 0
 
+  // Build DataTable rows — one per player, values = aggregated metric
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const tableRows = useMemo<TableRow[]>(
+    () =>
+      filtered.players.map((player) => ({
+        id: player.id,
+        label: player.name,
+        sublabel: player.position,
+        values: Object.fromEntries(
+          filtered.metrics.map((m) => [
+            m.key,
+            playerMetricAggregated(filtered.points, player.id, m),
+          ])
+        ),
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filtered]
+  )
+
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Overview</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {filtered.players.length} giocatori · {filtered.points.length} sessioni
-          {filtered.dateRange.from && (
-            <>
-              {' '}· {filtered.dateRange.from} → {filtered.dateRange.to}
-            </>
-          )}
-        </p>
+        {filtered && (
+          <p className="mt-1 text-sm text-muted-foreground">
+            {filtered.players.length} giocatori · {filtered.points.length} sessioni/drill
+            {filtered.dateRange.from && (
+              <> · {filtered.dateRange.from} → {filtered.dateRange.to}</>
+            )}
+          </p>
+        )}
       </div>
 
       {!hasMetrics && (
@@ -118,7 +141,10 @@ export default function Overview() {
                     ))}
                   </select>
                   <button
-                    onClick={() => chartRef.current && downloadChartPNG(chartRef.current, `overview_${activeMetricKey}.png`)}
+                    onClick={() =>
+                      chartRef.current &&
+                      downloadChartPNG(chartRef.current, `overview_${activeMetricKey}.png`)
+                    }
                     aria-label="Esporta grafico come PNG"
                     className="flex h-7 w-7 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                   >
@@ -132,14 +158,11 @@ export default function Overview() {
             </section>
           )}
 
-          {/* Players × Metrics Table */}
+          {/* DataTable composabile */}
           <section>
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Giocatori × Metriche
-                <span className="ml-2 font-normal normal-case opacity-60">
-                  media nel periodo · clicca colonna per ordinare
-                </span>
               </h2>
               <button
                 onClick={() => filtered && downloadCSV(filtered, 'overview.csv')}
@@ -150,7 +173,11 @@ export default function Overview() {
                 CSV
               </button>
             </div>
-            <PlayersTable dataset={filtered} />
+            <DataTable
+              rows={tableRows}
+              metrics={filtered.metrics}
+              caption="media aggregata per giocatore nel periodo"
+            />
           </section>
         </>
       )}

@@ -1,4 +1,4 @@
-import type { DataPoint } from '@/types/data'
+import type { DataPoint, MetricDefinition } from '@/types/data'
 
 // ── Basic aggregators ────────────────────────────────────────────────────────
 
@@ -34,6 +34,68 @@ export function percentChange(
   return ((current - previous) / Math.abs(previous)) * 100
 }
 
+// ── Drill → day aggregation ──────────────────────────────────────────────────
+
+/**
+ * Aggregate drill-level DataPoints to one value per (player, date) for a metric.
+ * Uses the MetricDefinition.aggregation strategy: sum for volumes, avg/max for intensity.
+ */
+export function aggregateDrillsToDaily(
+  points: DataPoint[],
+  playerId: string,
+  metric: MetricDefinition
+): { date: string; value: number | null }[] {
+  const byDate = new Map<string, number[]>()
+  for (const p of points) {
+    if (p.playerId !== playerId || p.isTeamAverage) continue
+    const v = p.values[metric.key]
+    if (v !== null && !isNaN(v)) {
+      if (!byDate.has(p.date)) byDate.set(p.date, [])
+      byDate.get(p.date)!.push(v)
+    }
+  }
+  return [...byDate.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, vals]) => ({
+      date,
+      value:
+        metric.aggregation === 'sum'
+          ? vals.reduce((a, b) => a + b, 0)
+          : metric.aggregation === 'max'
+          ? Math.max(...vals)
+          : vals.reduce((a, b) => a + b, 0) / vals.length,
+    }))
+}
+
+/**
+ * Player metric aggregate (respects aggregation strategy across all drills).
+ * For volume metrics (sum): total per day, then average across days.
+ * For avg/max metrics: direct aggregate over all drills.
+ */
+export function playerMetricAggregated(
+  points: DataPoint[],
+  playerId: string,
+  metric: MetricDefinition
+): number | null {
+  if (metric.aggregation === 'sum') {
+    // Sum drills per day, then average days
+    const daily = aggregateDrillsToDaily(points, playerId, metric)
+    return avg(daily.map((d) => d.value))
+  }
+  if (metric.aggregation === 'max') {
+    const vals = points
+      .filter((p) => p.playerId === playerId && !p.isTeamAverage)
+      .map((p) => p.values[metric.key])
+      .filter((v): v is number => v !== null && !isNaN(v))
+    return vals.length ? Math.max(...vals) : null
+  }
+  return avg(
+    points
+      .filter((p) => p.playerId === playerId && !p.isTeamAverage)
+      .map((p) => p.values[metric.key] ?? null)
+  )
+}
+
 // ── Time series helpers ──────────────────────────────────────────────────────
 
 export function stdDev(values: number[]): number {
@@ -56,15 +118,18 @@ export function movingAverage(
   })
 }
 
-/** Build a per-date aggregated time series for one player × one metric. */
+/** Build a per-date aggregated time series for one player × one metric.
+ *  Prefers MetricDefinition for correct aggregation strategy; falls back to avg. */
 export function playerTimeSeries(
   points: DataPoint[],
   playerId: string,
-  metricKey: string
+  metricKey: string,
+  metric?: MetricDefinition
 ): { date: string; value: number | null }[] {
+  if (metric) return aggregateDrillsToDaily(points, playerId, metric)
   const byDate = new Map<string, number[]>()
   for (const p of points) {
-    if (p.playerId !== playerId) continue
+    if (p.playerId !== playerId || p.isTeamAverage) continue
     const v = p.values[metricKey]
     if (v !== null && !isNaN(v)) {
       if (!byDate.has(p.date)) byDate.set(p.date, [])

@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Download } from 'lucide-react'
 import { useDataStore } from '@/store/dataStore'
 import { useFilterStore } from '@/store/filterStore'
-import { playerTimeSeries, playerMetricAvg } from '@/lib/metrics'
+import { playerTimeSeries, playerMetricAggregated } from '@/lib/metrics'
 import { downloadCSV } from '@/lib/export'
 import ComparePlayerSelect from '@/components/compare/ComparePlayerSelect'
-import RankingTable from '@/components/compare/RankingTable'
+import DataTable from '@/components/table/DataTable'
+import type { TableRow } from '@/hooks/useTableConfig'
 import MultiLineChart from '@/components/charts/MultiLineChart'
 import ScatterMetricChart from '@/components/charts/ScatterMetricChart'
 import CompareRadarChart from '@/components/charts/CompareRadarChart'
@@ -103,10 +104,28 @@ export default function Compare() {
     : []
 
   const scatterX = selectedPlayers.map((p) =>
-    playerMetricAvg(filteredPoints, p.id, activeXKey)
+    xMetric ? playerMetricAggregated(filteredPoints, p.id, xMetric) : null
   )
   const scatterY = selectedPlayers.map((p) =>
-    playerMetricAvg(filteredPoints, p.id, activeYKey)
+    yMetric ? playerMetricAggregated(filteredPoints, p.id, yMetric) : null
+  )
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const tableRows = useMemo<TableRow[]>(
+    () =>
+      selectedPlayers.map((player, i) => ({
+        id: player.id,
+        label: player.name,
+        sublabel: `#${i + 1}`,
+        values: Object.fromEntries(
+          availableMetrics.map((m) => [
+            m.key,
+            playerMetricAggregated(filteredPoints, player.id, m),
+          ])
+        ),
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedPlayers, filteredPoints, availableMetrics]
   )
 
   const testMetrics = availableMetrics.filter((m) => m.category === 'test')
@@ -225,18 +244,18 @@ export default function Compare() {
             </section>
           )}
 
-          {/* Ranking table */}
+          {/* DataTable composabile */}
           <section>
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Ranking · clicca colonna per ordinare
+                Confronto dettagliato
               </h2>
               <button
                 onClick={() => {
                   const exportDataset = {
                     players: selectedPlayers,
                     metrics: availableMetrics,
-                    points: filteredPoints.filter(p => selectedIds.includes(p.playerId)),
+                    points: filteredPoints.filter((p) => selectedIds.includes(p.playerId)),
                     dateRange: rawDataset.dateRange,
                   }
                   downloadCSV(exportDataset, 'confronto.csv')
@@ -248,11 +267,10 @@ export default function Compare() {
                 CSV
               </button>
             </div>
-            <RankingTable
-              players={selectedPlayers}
+            <DataTable
+              rows={tableRows}
               metrics={availableMetrics}
-              points={filteredPoints}
-              defaultSortKey={activeLineKey}
+              caption="media aggregata per giocatore nel periodo"
             />
           </section>
         </>

@@ -5,6 +5,7 @@ import type { MetricCategory } from '@/types/data'
 const CATEGORIES: { value: MetricCategory; label: string }[] = [
   { value: 'gps', label: 'GPS' },
   { value: 'workload', label: 'Carico' },
+  { value: 'hr', label: 'Cardio' },
   { value: 'test', label: 'Test' },
 ]
 

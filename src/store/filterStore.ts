@@ -20,7 +20,7 @@ interface FilterStore extends FilterState {
 const defaultState: FilterState = {
   dateRange: { from: null, to: null },
   selectedPlayerIds: [],
-  selectedCategories: ['gps', 'workload', 'test'],
+  selectedCategories: ['gps', 'workload', 'hr', 'test'],
   selectedSessionTypes: [],
 }
 
