@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { Download } from 'lucide-react'
 import { useDataStore } from '@/store/dataStore'
 import { useFilterStore } from '@/store/filterStore'
 import {
@@ -13,6 +14,7 @@ import RadarProfileChart from '@/components/charts/RadarProfileChart'
 import WorkloadStats from '@/components/playerdetail/WorkloadStats'
 import AlertPanel from '@/components/playerdetail/AlertPanel'
 import type { PlayerAlert } from '@/components/playerdetail/AlertPanel'
+import { downloadChartPNG } from '@/lib/export'
 
 const MA_WINDOW = 7
 
@@ -24,6 +26,7 @@ export default function PlayerDetail() {
 
   const [playerId, setPlayerId] = useState('')
   const [metricKey, setMetricKey] = useState('')
+  const chartRef = useRef<HTMLDivElement>(null)
 
   if (!rawDataset) {
     return (
@@ -151,6 +154,13 @@ export default function PlayerDetail() {
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-sm font-medium">Andamento nel tempo</h2>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => chartRef.current && downloadChartPNG(chartRef.current, `${playerId}_${activeMetricKey}.png`)}
+                  aria-label="Esporta grafico come PNG"
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                >
+                  <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
                 {baseline && (
                   <span className="text-xs text-muted-foreground">
                     Baseline: {baseline.mean.toLocaleString('it-IT', { maximumFractionDigits: 1 })}
@@ -174,6 +184,7 @@ export default function PlayerDetail() {
                 )}
               </div>
             </div>
+            <div ref={chartRef}>
             <LineMetricChart
               series={chartSeries}
               metricLabel={activeMetric?.label ?? ''}
@@ -181,6 +192,7 @@ export default function PlayerDetail() {
               baseline={baseline}
               maWindow={MA_WINDOW}
             />
+            </div>
           </section>
 
           {/* ACWR / Workload stats */}

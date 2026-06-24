@@ -1,4 +1,23 @@
-import type { ColumnMapping } from '@/types/data'
+import { get as idbGet, set as idbSet, del as idbDel } from 'idb-keyval'
+import type { ColumnMapping, Dataset } from '@/types/data'
+
+// ── IndexedDB ─────────────────────────────────────────────────────────────────
+
+const IDB_DATASET_KEY = 'kappasport_dataset_v1'
+
+export async function saveDatasetToIDB(dataset: Dataset): Promise<void> {
+  await idbSet(IDB_DATASET_KEY, dataset)
+}
+
+export async function loadDatasetFromIDB(): Promise<Dataset | null> {
+  return (await idbGet<Dataset>(IDB_DATASET_KEY)) ?? null
+}
+
+export async function clearDatasetFromIDB(): Promise<void> {
+  await idbDel(IDB_DATASET_KEY)
+}
+
+// ── localStorage — import templates ──────────────────────────────────────────
 
 const STORAGE_KEY = 'kappasport_import_templates'
 

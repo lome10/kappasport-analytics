@@ -7,8 +7,8 @@ import FileUpload from './FileUpload'
 import SheetSelector from './SheetSelector'
 import ColumnMapper from './ColumnMapper'
 import ImportPreview from './ImportPreview'
-import { parseCSV } from '@/lib/parsers/csvParser'
-import { getSheetNames, parseSheet } from '@/lib/parsers/xlsxParser'
+// Parsers are lazily imported to keep the initial bundle small
+
 import { inferMappings } from '@/lib/schema'
 import { normalize } from '@/lib/normalize'
 import { loadTemplate, saveTemplate } from '@/lib/persistence'
@@ -51,8 +51,9 @@ export default function ImportWizard() {
     setStep('mapping')
   }
 
-  const loadXlsxSheet = (buf: ArrayBuffer, sheetName: string) => {
+  const loadXlsxSheet = async (buf: ArrayBuffer, sheetName: string) => {
     try {
+      const { parseSheet } = await import('@/lib/parsers/xlsxParser')
       const result = parseSheet(buf, sheetName)
       applyParseResult(result)
     } catch (e) {
@@ -67,9 +68,11 @@ export default function ImportWizard() {
       const ext = file.name.split('.').pop()?.toLowerCase()
 
       if (ext === 'csv') {
+        const { parseCSV } = await import('@/lib/parsers/csvParser')
         const result = await parseCSV(file)
         applyParseResult(result)
       } else {
+        const { getSheetNames } = await import('@/lib/parsers/xlsxParser')
         const buf = await file.arrayBuffer()
         const names = getSheetNames(buf)
         setXlsxBuffer(buf)
@@ -87,9 +90,9 @@ export default function ImportWizard() {
     }
   }
 
-  const handleSheetSelect = (name: string) => {
+  const handleSheetSelect = async (name: string) => {
     if (!xlsxBuffer) return
-    loadXlsxSheet(xlsxBuffer, name)
+    await loadXlsxSheet(xlsxBuffer, name)
   }
 
   const handleConfirm = () => {

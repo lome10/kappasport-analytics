@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { Download } from 'lucide-react'
 import ImportWizard from '@/components/upload/ImportWizard'
 import KpiCard from '@/components/cards/KpiCard'
 import BarMetricChart from '@/components/charts/BarMetricChart'
@@ -8,6 +9,7 @@ import { useFilterStore } from '@/store/filterStore'
 import { useFilteredDataset } from '@/hooks/useFilteredDataset'
 import { applyFilters } from '@/lib/filters'
 import { groupMetricAvg, percentChange, getPreviousPeriodRange } from '@/lib/metrics'
+import { downloadCSV, downloadChartPNG } from '@/lib/export'
 
 export default function Overview() {
   const hasData = useDataStore((s) => s.dataset !== null)
@@ -20,6 +22,7 @@ export default function Overview() {
   const selectedSessionTypes = useFilterStore((s) => s.selectedSessionTypes)
 
   const [chartMetricKey, setChartMetricKey] = useState('')
+  const chartRef = useRef<HTMLDivElement>(null)
 
   if (!hasData) return <ImportWizard />
   if (!filtered) return null
@@ -100,32 +103,53 @@ export default function Overview() {
           {/* Bar Chart */}
           {hasPlayers && activeMetricKey && (
             <section className="rounded-xl bg-card p-4 ring-1 ring-foreground/10">
-              <div className="mb-4 flex items-center justify-between">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-sm font-medium">Confronto giocatori</h2>
-                <select
-                  value={activeMetricKey}
-                  onChange={(e) => setChartMetricKey(e.target.value)}
-                  className="h-7 rounded-md border border-input bg-background px-2 text-xs"
-                >
-                  {filtered.metrics.map((m) => (
-                    <option key={m.key} value={m.key}>
-                      {m.label}{m.unit ? ` (${m.unit})` : ''}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={activeMetricKey}
+                    onChange={(e) => setChartMetricKey(e.target.value)}
+                    className="h-7 rounded-md border border-input bg-background px-2 text-xs"
+                  >
+                    {filtered.metrics.map((m) => (
+                      <option key={m.key} value={m.key}>
+                        {m.label}{m.unit ? ` (${m.unit})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => chartRef.current && downloadChartPNG(chartRef.current, `overview_${activeMetricKey}.png`)}
+                    aria-label="Esporta grafico come PNG"
+                    className="flex h-7 w-7 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                  >
+                    <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                </div>
               </div>
-              <BarMetricChart dataset={filtered} metricKey={activeMetricKey} />
+              <div ref={chartRef}>
+                <BarMetricChart dataset={filtered} metricKey={activeMetricKey} />
+              </div>
             </section>
           )}
 
           {/* Players × Metrics Table */}
           <section>
-            <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Giocatori × Metriche
-              <span className="ml-2 font-normal normal-case opacity-60">
-                media per giocatore nel periodo · clicca colonna per ordinare
-              </span>
-            </h2>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Giocatori × Metriche
+                <span className="ml-2 font-normal normal-case opacity-60">
+                  media nel periodo · clicca colonna per ordinare
+                </span>
+              </h2>
+              <button
+                onClick={() => filtered && downloadCSV(filtered, 'overview.csv')}
+                aria-label="Esporta tabella come CSV"
+                className="flex items-center gap-1.5 h-7 rounded-md border border-input bg-background px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              >
+                <Download className="h-3 w-3" aria-hidden="true" />
+                CSV
+              </button>
+            </div>
             <PlayersTable dataset={filtered} />
           </section>
         </>

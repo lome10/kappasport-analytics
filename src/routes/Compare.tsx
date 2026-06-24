@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { Download } from 'lucide-react'
 import { useDataStore } from '@/store/dataStore'
 import { useFilterStore } from '@/store/filterStore'
 import { playerTimeSeries, playerMetricAvg } from '@/lib/metrics'
+import { downloadCSV } from '@/lib/export'
 import ComparePlayerSelect from '@/components/compare/ComparePlayerSelect'
 import RankingTable from '@/components/compare/RankingTable'
 import MultiLineChart from '@/components/charts/MultiLineChart'
@@ -225,9 +227,27 @@ export default function Compare() {
 
           {/* Ranking table */}
           <section>
-            <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Ranking · clicca colonna per ordinare
-            </h2>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Ranking · clicca colonna per ordinare
+              </h2>
+              <button
+                onClick={() => {
+                  const exportDataset = {
+                    players: selectedPlayers,
+                    metrics: availableMetrics,
+                    points: filteredPoints.filter(p => selectedIds.includes(p.playerId)),
+                    dateRange: rawDataset.dateRange,
+                  }
+                  downloadCSV(exportDataset, 'confronto.csv')
+                }}
+                aria-label="Esporta tabella come CSV"
+                className="flex items-center gap-1.5 h-7 rounded-md border border-input bg-background px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              >
+                <Download className="h-3 w-3" aria-hidden="true" />
+                CSV
+              </button>
+            </div>
             <RankingTable
               players={selectedPlayers}
               metrics={availableMetrics}
