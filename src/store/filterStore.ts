@@ -1,28 +1,33 @@
 import { create } from 'zustand'
 import type { MetricCategory } from '@/types/data'
 
-interface FilterStore {
+export interface FilterState {
   dateRange: { from: string | null; to: string | null }
   selectedPlayerIds: string[]
   selectedCategories: MetricCategory[]
   selectedSessionTypes: string[]
+}
+
+interface FilterStore extends FilterState {
   setDateRange: (range: { from: string | null; to: string | null }) => void
+  setPlayerIds: (ids: string[]) => void
   togglePlayer: (id: string) => void
   toggleCategory: (cat: MetricCategory) => void
   toggleSessionType: (type: string) => void
   resetFilters: () => void
 }
 
-const defaultState = {
+const defaultState: FilterState = {
   dateRange: { from: null, to: null },
-  selectedPlayerIds: [] as string[],
-  selectedCategories: ['gps', 'workload', 'test'] as MetricCategory[],
-  selectedSessionTypes: [] as string[],
+  selectedPlayerIds: [],
+  selectedCategories: ['gps', 'workload', 'test'],
+  selectedSessionTypes: [],
 }
 
 export const useFilterStore = create<FilterStore>((set, get) => ({
   ...defaultState,
   setDateRange: (range) => set({ dateRange: range }),
+  setPlayerIds: (ids) => set({ selectedPlayerIds: ids }),
   togglePlayer: (id) => {
     const { selectedPlayerIds } = get()
     set({

@@ -13,6 +13,7 @@ import { inferMappings } from '@/lib/schema'
 import { normalize } from '@/lib/normalize'
 import { loadTemplate, saveTemplate } from '@/lib/persistence'
 import { useDataStore } from '@/store/dataStore'
+import { useFilterStore } from '@/store/filterStore'
 import type { ColumnMapping, ParseResult } from '@/types/data'
 
 type Step = 'upload' | 'sheet-select' | 'mapping' | 'done'
@@ -40,6 +41,7 @@ export default function ImportWizard() {
   const [mappings, setMappings] = useState<ColumnMapping[]>([])
 
   const setDataset = useDataStore((s) => s.setDataset)
+  const resetFilters = useFilterStore((s) => s.resetFilters)
 
   const applyParseResult = (result: ParseResult) => {
     const saved = loadTemplate(result.headers)
@@ -103,6 +105,7 @@ export default function ImportWizard() {
         return
       }
       saveTemplate(parseResult.headers, mappings)
+      resetFilters()
       setWarnings(w)
       setDataset(dataset)
       setStep('done')

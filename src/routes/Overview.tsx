@@ -1,29 +1,30 @@
 import ImportWizard from '@/components/upload/ImportWizard'
 import { useDataStore } from '@/store/dataStore'
+import { useFilteredDataset } from '@/hooks/useFilteredDataset'
 
 export default function Overview() {
-  const dataset = useDataStore((s) => s.dataset)
+  const hasData = useDataStore((s) => s.dataset !== null)
+  const filtered = useFilteredDataset()
 
-  if (!dataset) {
-    return <ImportWizard />
-  }
+  if (!hasData) return <ImportWizard />
 
   return (
-    <div className="space-y-2">
-      <h1 className="text-2xl font-bold tracking-tight">Overview</h1>
-      <p className="text-sm text-muted-foreground">
-        {dataset.players.length} giocatori · {dataset.metrics.length} metriche ·{' '}
-        {dataset.points.length} sessioni importate
-        {dataset.dateRange.from && (
-          <>
-            {' '}· dal{' '}
-            <span className="font-medium text-foreground">{dataset.dateRange.from}</span>
-            {' '}al{' '}
-            <span className="font-medium text-foreground">{dataset.dateRange.to}</span>
-          </>
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Overview</h1>
+        {filtered && (
+          <p className="text-sm text-muted-foreground mt-1">
+            {filtered.players.length} giocatori · {filtered.metrics.length} metriche ·{' '}
+            {filtered.points.length} sessioni
+            {filtered.dateRange.from && (
+              <>
+                {' '}· {filtered.dateRange.from} → {filtered.dateRange.to}
+              </>
+            )}
+          </p>
         )}
-      </p>
-      <p className="text-sm text-muted-foreground pt-2">
+      </div>
+      <p className="text-sm text-muted-foreground">
         KPI di gruppo, tabella ordinabile e grafico a barre — Fase 3.
       </p>
     </div>

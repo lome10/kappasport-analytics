@@ -3,6 +3,11 @@
 > Documento di specifica da fornire a Claude Code.
 > Obiettivo: costruire una web app stile Power BI per analizzare nel tempo e per metrica i dati dei giocatori esportati dal software KappaSport.
 
+> **Stato avanzamento**
+> - ✅ Fase 0 — Setup completato (scaffold Vite + React + TS + Tailwind + shadcn/ui, layout base, routing). Repo: `lome10/kappasport-analytics`, branch `dev`.
+> - ▶️ Fase 1 — Import dati: **in corso** (fase attuale).
+> - ⬜ Fasi 2–6 — da fare.
+
 ---
 
 ## 1. Obiettivo del progetto
@@ -62,6 +67,7 @@ src/
     layout/             # Sidebar, Topbar, filtri globali
     upload/             # FileUpload, ColumnMapper, ImportPreview
     charts/             # LineMetricChart, BarChart, RadarChart, ScatterChart
+    table/              # DataTable (componibile), ColumnPicker, ValueFilter
     filters/            # DateRangePicker, PlayerSelect, MetricSelect, CategoryToggle
     cards/              # KpiCard, TrendCard
   store/
@@ -110,6 +116,34 @@ interface Dataset {
 
 ---
 
+## 4-bis. Tabelle dinamiche e componibili (requisito trasversale centrale)
+
+Questo è un comportamento chiave dello strumento, non un dettaglio di una singola vista: **è l'utente a comporre la tabella scegliendo al volo cosa vedere**, esattamente come nel pattern "field picker + slicer" di Power BI. Le tabelle non sono mai a colonne fisse.
+
+Realizzare un componente riutilizzabile `DataTable` (in `components/table/`) con queste capacità:
+
+- **Selettore di colonne (field picker):** l'utente attiva/disattiva qualsiasi metrica disponibile nel dataset; la tabella aggiunge/rimuove le colonne dinamicamente. Le metriche disponibili derivano dal `Dataset` importato (schema-agnostico), non da un elenco hardcodato.
+- **Filtri sui valori (slicer):** per ogni colonna numerica, filtro per soglia/range (min–max); per le colonne categoriche (giocatore, tipo sessione), filtro per inclusione. I filtri sono combinabili (AND).
+- **Ordinamento** per qualsiasi colonna, ascendente/discendente, multi-colonna se fattibile.
+- **Raggruppamento opzionale** per giocatore o per tipo sessione, con righe di aggregato (media/somma) per gruppo.
+- **Composizione persistente:** la configurazione della tabella (colonne attive, filtri, ordinamento) si salva come "vista" riutilizzabile e si conserva tra le sessioni (IndexedDB, vedi Fase 6).
+- **Coerenza con i filtri globali:** la tabella parte dai dati già filtrati dalla barra globale (date range, categoria) e applica sopra i propri filtri locali di colonna.
+
+Stato della tabella suggerito (in un hook `useTableConfig` o nello store):
+
+```ts
+interface TableConfig {
+  visibleColumns: string[];                 // chiavi metriche attive
+  sort: { key: string; dir: 'asc' | 'desc' }[];
+  valueFilters: Record<string, { min?: number; max?: number; include?: string[] }>;
+  groupBy?: 'player' | 'sessionType' | null;
+}
+```
+
+> Implementare `DataTable` come componente generico guidato da `TableConfig`, così tutte le viste lo riusano passando dati e configurazione diversi, invece di reimplementare tabelle separate.
+
+---
+
 ## 5. Fasi di sviluppo
 
 Implementare in quest'ordine. Ogni fase deve essere funzionante e testabile prima di passare alla successiva.
@@ -138,7 +172,7 @@ Implementare in quest'ordine. Ogni fase deve essere funzionante e testabile prim
 
 ### Fase 3 — Vista Overview (team/gruppo)
 - Griglia di KPI card: medie/totali di gruppo per le metriche chiave nel periodo selezionato, con variazione % rispetto al periodo precedente.
-- Tabella ordinabile giocatori × metriche.
+- **Tabella componibile** (`DataTable`, vedi sez. 4-bis): l'utente sceglie quali metriche mostrare come colonne, filtra sui valori e ordina liberamente. È il fulcro della vista, non un complemento.
 - Grafico a barre per confrontare tutti i giocatori su una metrica selezionabile.
 - Heatmap settimanale del carico per giocatore (opzionale ma molto utile).
 
@@ -154,7 +188,7 @@ Implementare in quest'ordine. Ogni fase deve essere funzionante e testabile prim
 - Line chart sovrapposto della stessa metrica per i giocatori scelti.
 - Radar chart comparativo (utile per i test fisici).
 - Scatter chart per correlare due metriche (es. distanza vs RPE) con un punto per giocatore.
-- Tabella comparativa con ranking.
+- **Tabella comparativa componibile** (`DataTable`, vedi sez. 4-bis) con colonne scelte dall'utente, ranking e raggruppamento per giocatore.
 
 ### Fase 6 — Rifinitura
 - Persistenza in IndexedDB: ricarica automatica dell'ultimo dataset all'apertura.
@@ -183,6 +217,7 @@ Documentare le formule con commenti e citare la convenzione usata, così sono ve
 
 - L'utente carica un CSV/Excel reale di KappaSport e completa l'import in meno di un minuto tramite il column mapper.
 - Le tre viste mostrano dati coerenti rispetto ai filtri attivi.
+- L'utente compone una tabella scegliendo le colonne (metriche) da mostrare, filtra sui valori e ordina; la tabella si ricompone in tempo reale e la configurazione si può salvare e riutilizzare.
 - Cambiando il date range, tutti i grafici e le KPI si aggiornano.
 - Gli alert su ACWR e z-score si attivano correttamente su dati di test.
 - Nessun crash su file con colonne mancanti o valori sporchi: l'app degrada con messaggi chiari.
@@ -195,5 +230,6 @@ Documentare le formule con commenti e citare la convenzione usata, così sono ve
 - Procedi **una fase alla volta**, fermandoti per una verifica funzionale prima di proseguire.
 - La Fase 1 (import + mapping) è la fondamenta: investici tempo e rendila robusta e agnostica rispetto allo schema.
 - Tieni i tipi in `types/data.ts` come fonte di verità unica.
+- Il componente `DataTable` (sez. 4-bis) è centrale: costruiscilo generico e guidato dallo schema del dataset importato, mai con colonne hardcodate. Tutte le viste con tabella lo riusano.
 - Prima di scrivere i calcoli in `metrics.ts`, chiedi conferma sulle formule (le convenzioni su ACWR e carico variano tra staff).
 - Se lo schema reale di KappaSport differisce dalle assunzioni qui sopra, adatta il mapping, **non** hardcodare le colonne.
