@@ -1,5 +1,20 @@
 export type MetricCategory = 'gps' | 'workload' | 'test'
 
+export type ColumnRole = 'player' | 'date' | 'sessionType' | 'metric' | 'ignore'
+
+export interface ColumnMapping {
+  columnName: string
+  role: ColumnRole
+  metricLabel?: string
+  metricUnit?: string
+  metricCategory?: MetricCategory
+}
+
+export interface ParseResult {
+  headers: string[]
+  rows: Record<string, string>[]
+}
+
 export interface MetricDefinition {
   key: string
   label: string
