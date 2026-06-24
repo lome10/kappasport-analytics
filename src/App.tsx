@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import AppLayout from '@/components/layout/AppLayout'
+import PwaUpdatePrompt from '@/components/PwaUpdatePrompt'
 import { useDataStore } from '@/store/dataStore'
 
 const Overview = lazy(() => import('@/routes/Overview'))
@@ -39,6 +40,7 @@ function RouteFallback() {
 export default function App() {
   return (
     <BrowserRouter>
+      <PwaUpdatePrompt />
       <DataHydrator>
         <Routes>
           <Route element={<AppLayout />}>
